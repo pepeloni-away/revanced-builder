@@ -7,6 +7,7 @@ import re
 import argparse
 
 def download_file(file_url: str, file_name: str):
+    return
     print("Downloading", file_url, "as", file_name)
 
     # Set the chunk size for downloading (adjust as needed)
@@ -115,8 +116,36 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
         file.write(integrations_version)
 
 def get_apk(version: str):
-    total_i = 0
-    last_progress = ""
+    current_request = 0
+    total_requests = 0
+    last_progress_msg = ""
+
+    # update one terminal line as we navigate apk host sites, looking for download urls
+    # this function should be called once before the first request with the total number of requests, and then called empty before each subsequent request
+    # reuse url for the request link
+    def progress(steps: int=0):
+        nonlocal current_request, total_requests, last_progress_msg, url
+        bad_initial_call = ""
+        if steps > 0:
+            current_request = 1
+            total_requests = steps
+        else:
+            current_request += 1
+            if not bad_initial_call and current_request > total_requests:
+                bad_initial_call = "fix your initial get_apk progress call!"
+        msg = f"Fetching [{current_request}/{total_requests or '?'}]: {f"[{bad_initial_call}]{url}" if bad_initial_call else url}"
+        spaces_to_clear = " " * len(last_progress_msg)
+        print(f"\r{spaces_to_clear}", end="", flush=True)
+        last_progress_msg = msg
+        print(f"\r{msg}", end="", flush=True)
+        if current_request >= total_requests:
+            print()
+
+    # clear the line one last time so the next regular print call looks normal
+    # def finish_progress():
+    #     nonlocal last_progress_msg
+    #     print(f"\r{' ' * len(last_progress_msg)}", end="", flush=True)
+
     def fail(url: str, level: int=0):
         print("Failed at url" + f" {level}:" if level else ":", url)
         raise Exception("Failed to get apk download link")
@@ -125,16 +154,6 @@ def get_apk(version: str):
         with open(".youtube_version.txt", "w") as file:
             file.write(version)
     
-    def progress(last_progress=last_progress):
-        msg = f"Fetching [{i}/{total_i or '?'}]: {url}"
-        spaces_to_clear = " " * len(last_progress)
-        print(f"\r{spaces_to_clear}", end="", flush=True)
-        last_progress = msg
-        print(f"\r{msg}", end="", flush=True)
-    
-    def finish_progress():
-        print(f"\r{' ' * len(last_progress)}", end="", flush=True)
-
     def download_question_mark(url: str):
         if version in localversion:
             print("youtube.apk is up-to-date")
@@ -157,20 +176,16 @@ def get_apk(version: str):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
         }
-        total_i = 4
-        i = 1
-        progress()
+        progress(4)
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             url = base + re.findall(regex, response.text)[0]
             regex = r"(?<=href=\")(/apk/google-inc/youtube/.*\?key=\w+[^\"]+)"
-            i = 2
             progress()
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 url = base + re.findall(regex, response.text)[0].replace("&amp;", "&")
                 regex = r"<form id=\"filedownload\".*<\/form>"
-                i = 3
                 progress()
                 response = requests.get(url, headers=headers)
                 if response.status_code == 200:
@@ -183,9 +198,7 @@ def get_apk(version: str):
                         "?" +
                         "".join(["&" + value if index % 2 == 0 else "=" + value for index, value in enumerate(parms)])[1:]
                         )
-                    i = 4
                     progress()
-                    finish_progress()
                     response = requests.get(url, headers=headers, allow_redirects=False)
                     if response.status_code == 302:
                         url = response.headers["Location"]
