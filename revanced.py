@@ -5,9 +5,9 @@ import subprocess
 import sys
 import re
 import argparse
+import random
 
 def download_file(file_url: str, file_name: str):
-    return
     print("Downloading", file_url, "as", file_name)
 
     # Set the chunk size for downloading (adjust as needed)
@@ -32,13 +32,12 @@ def download_file(file_url: str, file_name: str):
             progress_percent = (downloaded_bytes / total_size) * 100
 
             # Print a simple progress bar
-            # sys.stdout.write(f"\r[{int(progress_percent)}%] [{'#' * int(progress_percent / 2)}{' ' * (50 - int(progress_percent / 2))}]")
             sys.stdout.write(f"\r[{'#' * int(progress_percent / 2)}{' ' * (50 - int(progress_percent / 2))}] [{int(progress_percent)}%]")
             sys.stdout.flush()
     print()
 
 def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integrations: str):
-    def get_github_download_links(url, furl=None, furl1=None):
+    def get_github_download_links(url, fallback_url=None, fallback_url1=None):
         response = requests.get(url)
         if response.status_code == 200:
             response = response.json()
@@ -46,15 +45,15 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
             for item in response["assets"]:
                 links.append(item["name"])
                 links.append(item["browser_download_url"])
-            return links # [name, url, ...]
+            return links # [name, url(, name, url)*]
         else:
             print(f"Failed to get download link from {url}")
-            if furl1 and furl != furl1:
+            if fallback_url1 and fallback_url != fallback_url1:
                 print("Attempting with fallback url")
-                return get_github_download_links(furl, furl1)
-            elif furl and url != furl:
+                return get_github_download_links(fallback_url, fallback_url1)
+            elif fallback_url and url != fallback_url:
                 print("Attempting with fallback url")
-                return get_github_download_links(furl)
+                return get_github_download_links(fallback_url)
             else:
                 raise Exception("Failed to download one or more patching tools")
 
@@ -66,11 +65,11 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
             os.path.exists("integrations.apk")
         )
     localfiles = []
-    if os.path.exists(".versions.txt") and files_still_there():
-        with open(".versions.txt", "r") as file:
+    if os.path.exists(".revanced_versions.txt") and files_still_there():
+        with open(".revanced_versions.txt", "r") as file:
             localfiles = [file.readline().strip() for _ in range(3)]
 
-    with open(".versions.txt", "w") as file:
+    with open(".revanced_versions.txt", "w") as file:
         pass
 
     # revanced-cli
@@ -110,134 +109,176 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
     else:
         download_file(dl_url, "integrations.apk")
 
-    with open(".versions.txt", "w") as file:
+    with open(".revanced_versions.txt", "w") as file:
         file.write(cli_version + "\n")
         file.write(patches_version + "\n")
         file.write(integrations_version)
 
-def get_apk(version: str):
+def get_apk(package_name: str, version: str):
     current_request = 0
     total_requests = 0
     last_progress_msg = ""
+    bad_initial_progress_call = ""
+    url = ""
 
-    # update one terminal line as we navigate apk host sites, looking for download urls
+    # update one line as we navigate apk host sites, looking for download urls
     # this function should be called once before the first request with the total number of requests, and then called empty before each subsequent request
-    # reuse url for the request link
-    def progress(steps: int=0):
-        nonlocal current_request, total_requests, last_progress_msg, url
-        bad_initial_call = ""
+    # reuse url for the request link, call with over="fail message" to move on to the next line
+    def progress(steps: int=0, over: str=""):
+        nonlocal current_request, total_requests, last_progress_msg, bad_initial_progress_call
         if steps > 0:
             current_request = 1
             total_requests = steps
+            bad_initial_progress_call = ""
         else:
             current_request += 1
-            if not bad_initial_call and current_request > total_requests:
-                bad_initial_call = "fix your initial get_apk progress call!"
-        msg = f"Fetching [{current_request}/{total_requests or '?'}]: {f"[{bad_initial_call}]{url}" if bad_initial_call else url}"
+            if not bad_initial_progress_call and current_request > total_requests:
+                bad_initial_progress_call = "fix your initial get_apk progress call!"
+        # msg = f"Fetching [{current_request}/{total_requests}]: {f"[{bad_initial_progress_call}]{ over or url}" if bad_initial_progress_call else over or url}"
+        msg = over or f"Fetching [{current_request}/{total_requests}]: {f"[{bad_initial_progress_call}]{url}" if bad_initial_progress_call else url}"
         spaces_to_clear = " " * len(last_progress_msg)
         print(f"\r{spaces_to_clear}", end="", flush=True)
         last_progress_msg = msg
         print(f"\r{msg}", end="", flush=True)
-        if current_request >= total_requests:
+        if over or current_request >= total_requests:
             print()
-
-    # clear the line one last time so the next regular print call looks normal
-    # def finish_progress():
-    #     nonlocal last_progress_msg
-    #     print(f"\r{' ' * len(last_progress_msg)}", end="", flush=True)
-
-    def fail(url: str, level: int=0):
-        print("Failed at url" + f" {level}:" if level else ":", url)
-        raise Exception("Failed to get apk download link")
     
     def log_version_on_success():
-        with open(".youtube_version.txt", "w") as file:
-            file.write(version)
-    
-    def download_question_mark(url: str):
-        if version in localversion:
-            print("youtube.apk is up-to-date")
-        else:
-            download_file(url, 'youtube.apk')
+        with open(".apk_version.txt", "w") as file:
+            file.write(f"{package_name}-{version}")
 
-    localversion = []
-    if os.path.exists(".youtube_version.txt") and os.path.exists("youtube.apk"):
-        with open(".youtube_version.txt", "r") as file:
-            localversion = [file.readline().strip() for _ in range(1)]
+    # apkcombo is a good source but they shill their own apk installer with xapks as the only option sometimes
+    # https://apkcombo.com/youtube/com.google.android.youtube/download/phone-18.38.44-apk case in point, whereas apkmirror provides the normal apk
+    def apkcombo():
+        nonlocal url
+        # this is either 404 or redirects to the app page with the specified version        [[[[[[[[[do this for apkpure as well, pkg search redirect works]]]]]]]]]
+        url = "https://apkcombo.com/search/" + package_name + "/download/" + ("apk" if version == "" else f"phone-{version}-apk")
+        progress()
+        response = requests.get(url, headers={"Referer": "https://apkcombo.com/"})
+        if response.status_code == 404:
+            progress(over="app not found on apkcombo!")
+            return
+        if response.status_code == 200:
+            # https://download.apkcombo.com/com.google.android.youtube/YouTube_18.43.41_apkcombo.com.apk
+            # ?ecp=Y29tLmdvb2dsZS5hbmRyb2lkLnlvdXR1YmUvMTguNDMuNDEvMTU0MDg4NTk1Mi41ODU3M2FmOGFhY2U5YjAxZmY0NTQwMDFhNGI4NDM2MzVhNGM0YjNhLmFwaw==
+            # &iat=1699141714&sig=a4201aefd1136aaf098d1d5333988fa3&size=131564206&from=cf&version=old&lang=en
+            regex = r'(?<=a href=")https://download\.apkcombo\.com/.*\.apk\?[^"]+'
+            # for /r2?u=https..... external download links?, found at least on com.zhiliaoapp.musically
+            regex2 = r'(?<=a href=")/r2.*\.apk[^"]+'
+            url_fist_part = re.search(regex, response.text) or re.search(regex2, response.text)
+            if url_fist_part == None:
+                print("\ndid not find standalone apk for this app/version on apkcombo, doesn't exits?:", url)
+                return
+            else:
+                url_fist_part = url_fist_part.group()
+                if re.match(r"^http", url_fist_part) is None:
+                    # this is partly urlencoded, requests should handle it though
+                    url_fist_part = "https://download.apkcombo.com" + url_fist_part
+                url = "https://apkcombo.com/checkin"
+                progress()
+                response = requests.get(url)
+                if response.status_code == 200:
+                    # fp=e1aa154442d600ccbfa78e01a042344e&ip=yourip
+                    url_second_part = response.text
+                    return url_fist_part + "&" + url_second_part
+        print("apkcombo failed at url:", url)
 
-    with open(".youtube_version.txt", "w") as file:
-        pass
-
-    try:
-        version_dashes = version.replace(".", "-")
+    def apkmirror(found_app_url: str=""):
+        nonlocal url
         base = "https://www.apkmirror.com"
-        url = f"https://www.apkmirror.com/apk/google-inc/youtube/youtube-{version_dashes}-release/"
-        regex = r"(?<=apkm-badge\">APK).*\n.*href=\"([^\"]+)"
+        supported_apps = {
+            "com.google.android.youtube": "https://www.apkmirror.com/apk/google-inc/youtube/",
+            "com.google.android.apps.youtube.music": "https://www.apkmirror.com/apk/google-inc/youtube-music/"
+        }
+        if found_app_url:
+            supported_apps[package_name] = found_app_url
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
         }
-        progress(4)
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            url = base + re.findall(regex, response.text)[0]
-            regex = r"(?<=href=\")(/apk/google-inc/youtube/.*\?key=\w+[^\"]+)"
-            progress()
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                url = base + re.findall(regex, response.text)[0].replace("&amp;", "&")
-                regex = r"<form id=\"filedownload\".*<\/form>"
+        if package_name in supported_apps:
+            url = supported_apps[package_name]
+            if not version:
                 progress()
                 response = requests.get(url, headers=headers)
                 if response.status_code == 200:
-                    download_form = re.findall(regex, response.text, flags=re.S)[0]
-                    parms = re.findall(r"name=\"([^\"]+)|value=\"([^\"]+)", download_form)
-                    parms = list(map(lambda x: x[0] if parms.index(x) % 2 == 0 else x[1], parms))
-                    url = (
-                        base +
-                        re.findall(r"action=\"([^\"]+)", download_form)[0] +
-                        "?" +
-                        "".join(["&" + value if index % 2 == 0 else "=" + value for index, value in enumerate(parms)])[1:]
-                        )
-                    progress()
-                    response = requests.get(url, headers=headers, allow_redirects=False)
-                    if response.status_code == 302:
-                        url = response.headers["Location"]
-                        download_question_mark(url)
-                        log_version_on_success()
-                        return
+                    # this is the first list item and should be the latest version available
+                    # /apk/google-inc/youtube/youtube-18-43-45-release/
+                    regex = r'<div class="widgetHeader[^"]+">All versions <\/div>.*?<a class="fontBlack" href="([^"]+)'
+                    match = re.search(regex, response.text, re.S)
+                    if match:
+                        url = base + match.group(1)
                     else:
-                        fail(url, i)
-                else:
-                    fail(url, i)
-            else:
-                fail(url, i)
-        else:
-            fail(url, i)
-    except Exception as e:
-        print("Failed to get apk download url from apkmirror\n", e)
-        print("Falling back to apkcombo")
-    
-    # apkcombo is a good source but they shill their own apk installer with xapks as the only option sometimes
-    # https://apkcombo.com/youtube/com.google.android.youtube/download/phone-18.38.44-apk case in point, whereas apkmirror provides the normal apk
+                        progress(over="failed to find the latest version of " + package_name + " on apkmirror")
+                        return
+            else :
+                slug = re.search(r"(?<=/)[^\/]+(?=\/$)", url).group()
+                url = url + slug + f"-{version.replace('.', '-').replace(':', '')}-release"
+            # url should look like this now: https://www.apkmirror.com/apk/google-inc/youtube/youtube-18-43-45-release/
+            regex = r'(?<=apkm-badge">APK).*?href="([^"]+)'
+            progress()
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                # https://www.apkmirror.com/apk/google-inc/youtube/youtube-18-38-44-release/youtube-18-38-44-2-android-apk-download/
+                url = base + re.search(regex, response.text, re.S).group(1)
 
-    url = f"https://apkcombo.com/youtube/com.google.android.youtube/download/phone-{version}-apk"
-    checkin_url = "https://apkcombo.com/checkin"
-    pattern = r"(?<=a href=\")https://download.apkcombo.com/com.google.android.youtube[^\"]+"
-    i = 1
-    response = requests.get(checkin_url)
-    if response.status_code == 200:
-        checkin = response.text
-        i = 2
-        response = requests.get(url)
-        if response.status_code == 200:
-            match = re.findall(pattern, response.text)[0]
-            apk_url = match + "&" + checkin
-            download_question_mark(apk_url)
-            log_version_on_success()
+                regex = r'(?<=href=")(\/apk\/.*?\?key=\w+[^"]+)'
+                progress()
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    # https://www.apkmirror.com/apk/google-inc/youtube/youtube-18-38-44-release/youtube-18-38-44-2-android-apk-download/
+                    # download/?key=714ea56dd827493337e50628f937846729feaf94&forcebaseapk=true
+                    url = base + re.search(regex, response.text).group(1).replace("&amp;", "&")
+
+                    regex = r'<form id="filedownload".*?<\/form>'
+                    progress()
+                    response = requests.get(url, headers=headers)
+                    if response.status_code == 200:
+                        download_form = re.search(regex, response.text, re.S).group()
+                        if download_form:
+                            parms = re.findall(r"name=\"([^\"]+)|value=\"([^\"]+)", download_form)
+                            parms = list(map(lambda x: x[0] if parms.index(x) % 2 == 0 else x[1], parms))
+                            url = (
+                                base +
+                                re.search(r'(?<=action=")([^"]+)', download_form).group() +
+                                "?" +
+                                "".join(["&" + value if index % 2 == 0 else "=" + value for index, value in enumerate(parms)])[1:]
+                            )
+
+                            progress()
+                            response = requests.get(url, headers=headers, allow_redirects=False)
+                            if response.status_code == 302:
+                                return response.headers["Location"]
+            print("apkmirror failed at url:", url)
         else:
-            fail(url, i)
-    else:
-        fail(checkin_url, i)
+            url = f'https://www.apkmirror.com/?post_type=app_release&searchtype=app&s="{package_name}"'
+            response = requests.get(url, headers=headers)
+            # print(response, response.text)
+            # rate limited rn, if this is 200 take the first search result and recall apkmirror with it else print apkmirror doesnt have it
+
+    localversion = []
+    if os.path.exists(".apk_version.txt") and os.path.exists("apk.apk"):
+        with open(".apk_version.txt", "r") as file:
+            localversion = [file.readline().strip() for _ in range(1)]
+
+    if f"{package_name}-{version}" in localversion:
+        print("apk.apk is up-to-date")
+        return
+
+    with open(".apk_version.txt", "w") as file:
+        pass
+
+    apk_websites = [apkcombo, apkmirror]
+    random.shuffle(apk_websites)
+    download_link = None
+    i = 0
+    while download_link == None and i in range(0, len(apk_websites)):
+        download_link = apk_websites[i]()
+        i +=1
+    print(download_link)
+    assert download_link, "Completely failed to download apk"
+    download_file(download_link, "apk.apk")
+
+    log_version_on_success()
 
 def select_options(user_input: str, option_list: list):
         selected_options = []
@@ -308,9 +349,12 @@ def check_keystore_type(keystore_file: str):
             print("New revanced key")
             return "new"
 
-    if process.returncode == 0 and "Your keystore contains 2 entries" in process.stdout and "alias," in process.stdout and "ReVanced Key," in process. stdout:
+    if process.returncode == 0 and "Your keystore contains 2 entries" in process.stdout and "alias," in process.stdout and "ReVanced Key," in process.stdout:
         print("Fixed keystore (see -h)")
         return "fixed"
+
+    if process.returncode == 1 and 'java.lang.Exception: Provider "org.bouncycastle.jce.provider.BouncyCastleProvider" not found' in process.stdout:
+        print("Keycheck failed as BouncyCastle jar file is missing from the working directory")
 
     print("Unexpected key, patching might fail")
     return "unexpected"
@@ -318,13 +362,20 @@ def check_keystore_type(keystore_file: str):
 def main():
     default_repo = "revanced"
 
-    parser = argparse.ArgumentParser(description="Build patched youtube apks with Revanced tools")
-    parser.add_argument("-l", "--local", action="store_true", help="Skip downloads and use the previously downloaded files")
-    parser.add_argument("-r", "--repository", type=str, default=default_repo,
-                        help="Github repository name for working directory and revanced-cli, patches and integrations (default and fallback: %(default)s)")
-    parser.add_argument("--cli", type=str, default=None, help="Github repository name for revanced-cli. Has priority over --repository")
-    parser.add_argument("--patches", type=str, default=None, help="Github repository name for revanced-patches. Has priority over --repository")
-    parser.add_argument("--integrations", type=str, default=None, help="Github repository name for revanced-integrations. Has priority over --repository")
+    parser = argparse.ArgumentParser(description="Build patched apps with ReVanced tools",
+                                     epilog='The script looks for a general "revanced.keystore" file inside the working directory. ' +
+                                     "Both pre and past revanced-cli4.0 keys are supported")
+    parser.add_argument("-l", "--local", action="store_true", help="build using local files to avoid unnecessary re-downloads")
+    parser.add_argument("repository", type=str, default=default_repo, nargs="?",
+                        help="github username to download revanced-cli, patches and integrations form, " +
+                        "also acts as download folder (default and fallback: %(default)s)")
+    parser.add_argument("--cli", type=str, default=None, help="github username to download revanced-cli from (priority over repository)")
+    parser.add_argument("--patches", type=str, default=None, help="github username to download revanced-patches from (priority over repository)")
+    parser.add_argument("--integrations", type=str, default=None, help="github username to download revanced-integrations from (priority over repository)")
+    parser.add_argument("-a", "--app", "--package", nargs="?", const="", default="com.google.android.youtube",
+                        help="specify an app to patch or be prompted to choose based on patches (default: %(default)s). " +
+                        "The script will scan the working directory for apk files before trying to download when this option is used. " +
+                        "No checks are done with this option, you can provide any apk and use at least the universal patches on it")
 
     args = parser.parse_args()
 
@@ -338,48 +389,67 @@ def main():
     if not args.local:
         update_revanced(args.repository, default_repo, args.cli, args.patches, args.integrations)
 
-    youtube_patches = []
-    recomended_version = None
+    all_apps = []
+    app_patches = []
+    recomended_version = ""
     with open("patches.json", "r") as file:
         data = json.load(file)
+
+    if args.app == "":
+        for key in data:
+            if key["compatiblePackages"] == None:
+                continue
+            for package in key["compatiblePackages"]:
+                if package["name"] not in all_apps:
+                    all_apps.append(package["name"])
+        all_apps.sort()
+        for i, item in enumerate(all_apps, start=1):
+            print(f"{i:{len(str(len(all_apps)))}}. {item}")
+        while True:
+            try:
+                user_input = int(input("Select app to patch: ")) - 1
+                if user_input in range(0, len(all_apps)):
+                    args.app = all_apps[user_input]
+                    break
+                else:
+                    raise IndexError()
+            except IndexError:
+                print("Invalid selection.")
+
     for key in data:
         # include universal patches
         if key["compatiblePackages"] == None:
-            youtube_patches.append(key)
+            app_patches.append(key)
             continue
         for package in key["compatiblePackages"]:
-            if package["name"] == "com.google.android.youtube":
-                youtube_patches.append(key)
+            if package["name"] == args.app:
+                app_patches.append(key)
                 # this isn't optimal but so far patches were updated all at once so it works
                 if not recomended_version and package["versions"]:
                     recomended_version = package["versions"][-1]
                     print("Presuming recomended youtube version:", recomended_version)
     
     if not args.local:
-        get_apk(recomended_version)
+        get_apk(args.app, recomended_version)
 
-    def get_patch_name_and_description(x):
-        default_string = f'{x["name"]} - {x["description"]}'
-        if x["use"] == False:
-            return "(-) " + default_string
-        return default_string
-    all_options = map(get_patch_name_and_description, youtube_patches)
+    all_options = map(lambda x: f'{x["name"]} - {x["description"]}' if x["use"] else "(-) " + f'{x["name"]} - {x["description"]}', app_patches)
 
     for i, item in enumerate(all_options, start=1):
-        print(f"{i}. {item}")
+        # print(f"{i}. {item}")
+        print(f"{i:{len(str(len(app_patches)))}}. {item}")
 
     print('"(-)" prefix means excluded by defalut')
     while True:
         try:
             user_input = input("Select patches e.g. 1,4,7,8-12,14 or empty for default: ")
-            selected_options = select_options(user_input, youtube_patches)
+            selected_options = select_options(user_input, app_patches)
             break
         except IndexError:
             print("Invalid selection.")
 
     keystore_file = "../revanced.keystore" if os.path.exists(os.path.join(os.path.dirname(os.getcwd()), "revanced.keystore")) else "revanced.keystore"
     base_command = ["java", "-jar", "cli.jar", "patch", "--patch-bundle=patches.jar", "--merge=integrations.apk", "--keystore=" + keystore_file,
-                    f"--out=../_builds/revanced({args.repository}).apk", "youtube.apk"]
+                    f"--out=../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk", "apk.apk"]
 
     # cli 4.0 doesn't work with old keys
     # https://github.com/ReVanced/revanced-cli/issues/277
@@ -390,13 +460,13 @@ def main():
     compatibility_patch_new_key = ["--alias=ReVanced Key", "--keystore-entry-password=", "--keystore-password="]
 
     if selected_options:
-        user_choice = get_selection_goal()
+        user_input = get_selection_goal()
 
-        if user_choice == 1:
+        if user_input == 1:
             base_command.append("--exclusive")
             for patch in selected_options:
                 base_command.append(f'--include={patch["name"]}')
-        elif user_choice == 2:
+        elif user_input == 2:
             for patch in selected_options:
                 base_command.append(f'--exclude={patch["name"]}')
         else:
