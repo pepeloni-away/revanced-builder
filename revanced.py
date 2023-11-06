@@ -485,4 +485,7 @@ def main():
     subprocess.run(base_command)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nThe script was interrupted by the user.")
