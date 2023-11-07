@@ -106,9 +106,7 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
         download_file(dl_url, "integrations.apk")
 
     with open(".revanced_versions.txt", "w") as file:
-        file.write(cli_version + "\n")
-        file.write(patches_version + "\n")
-        file.write(integrations_version)
+        file.write("\n".join([cli_version, patches_version, integrations_version]))
 
 def get_apk(package_name: str, version: str):
     current_request = 0
@@ -141,7 +139,7 @@ def get_apk(package_name: str, version: str):
     
     def log_version_on_success():
         with open(".apk_version.txt", "w") as file:
-            file.write(f"{package_name}-{version}")
+            file.write(f"{package_name}-{version or 'latest'}")
 
     # apkcombo is a good source but they shill their own apk installer with xapks as the only option sometimes
     # https://apkcombo.com/youtube/com.google.android.youtube/download/phone-18.38.44-apk case in point, whereas apkmirror provides the normal apk
