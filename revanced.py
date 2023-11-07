@@ -77,7 +77,6 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
     fallback_url = f"https://api.github.com/repos/{repo}/revanced-cli/releases/latest"
     fallback_url1 = f"https://api.github.com/repos/{fallback_repo}/revanced-cli/releases/latest" # the revanced repository
     cli_version, dl_url = get_github_download_links(file_url, fallback_url, fallback_url1)
-    # download_file(dl_url, "cli.jar")
     if cli_version in localfiles:
         print("cli.jar is up-to-date")
     else:
@@ -89,8 +88,6 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
     fallback_url1 = f"https://api.github.com/repos/{fallback_repo}/revanced-patches/releases/latest"
 
     patches_json, dl_url, patches_version, dl_url1 = get_github_download_links(file_url, fallback_url, fallback_url1)
-    # download_file(dl_url, "patches.json")
-    # download_file(dl_url1, "patches.jar")
     if patches_version in localfiles:
         print("patches.jar is up-to-date")
     else:
@@ -103,7 +100,6 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
     fallback_url1 = f"https://api.github.com/repos/{fallback_repo}/revanced-integrations/releases/latest"
 
     integrations_version, dl_url = get_github_download_links(file_url, fallback_url, fallback_url1)
-    # download_file(dl_url, "integrations.apk")
     if integrations_version in localfiles:
         print("integrations.apk is up-to-date")
     else:
@@ -274,43 +270,50 @@ def get_apk(package_name: str, version: str):
     while download_link == None and i in range(0, len(apk_websites)):
         download_link = apk_websites[i]()
         i +=1
-    print(download_link)
     assert download_link, "Completely failed to download apk"
     download_file(download_link, "apk.apk")
 
     log_version_on_success()
 
-def select_options(user_input: str, option_list: list):
-        selected_options = []
-        if user_input == "":
-            return
-        for part in user_input.split(","):
-            if "-" in part:
-                start, end = map(int, part.split("-"))
-                if start == 0 or end == 0 or start > len(option_list) or end > len(option_list):
-                    raise IndexError()
-                selected_options.extend(option_list[start - 1:end])
-            else:
-                if part == "" or int(part) == 0 or int(part) > len(option_list):
-                    raise IndexError()
-                selected_options.append(option_list[int(part) - 1])
-        return selected_options
-
-def get_selection_goal():
-    print("Selection usage:")
-    print("1. Only include the selected patches")
-    print("2. Exclude the selected patches (from the default ones)")
-    print("3. Include selected patches (together with default ones)")
+def select_item(message: str, item_list: list):
+    for index, item in enumerate(item_list, start=1):
+        print(f"{index:{len(str(len(item_list)))}}. {item}")
 
     while True:
         try:
-            choice = int(input("Enter the number of your choice: "))
-            if choice in (1, 2, 3):
-                return choice
+            choice = int(input(message))
+            if 1 <= choice <= len(item_list):
+                return item_list[choice - 1]
             else:
-                print("Invalid choice. Please enter 1, 2, or 3.")
+                print("Please enter a valid number corresponding to the options.")
         except ValueError:
-            print("Invalid input. Please enter a number.")
+            print("Please enter a valid number.")
+
+def select_multiple_items(message: str, item_list: list):
+    for index, item in enumerate(item_list, start=1):
+        print(f"{index:{len(str(len(item_list)))}}. {item}")
+
+    selected_items = []
+    while True:
+        selection = input(message)
+        indices = set()
+
+        try:
+            for part in selection.split(','):
+                if '-' in part:
+                    start, end = map(int, part.split('-'))
+                    indices.update(range(int(start), int(end) + 1))
+                else:
+                    indices.add(int(part))
+
+            for index in indices:
+                if 1 <= index <= len(item_list):
+                    selected_items.append(item_list[index - 1])
+
+            return selected_items
+
+        except (ValueError, IndexError):
+            print("Invalid input. Please enter valid numbers and/or ranges.")
 
 def check_java():
     cmd = ["java", "-version"]
@@ -365,7 +368,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build patched apps with ReVanced tools",
                                      epilog='The script looks for a general "revanced.keystore" file inside the working directory. ' +
                                      "Both pre and past revanced-cli4.0 keys are supported")
-    parser.add_argument("-l", "--local", action="store_true", help="build using local files to avoid unnecessary re-downloads")
+    parser.add_argument("-l", "--local", action="store_true", help="build using local files to avoid unnecessary github api requests(max 60/h) and re-downloads")
     parser.add_argument("repository", type=str, default=default_repo, nargs="?",
                         help="github username to download revanced-cli, patches and integrations form, " +
                         "also acts as download folder (default and fallback: %(default)s)")
@@ -402,19 +405,9 @@ def main():
             for package in key["compatiblePackages"]:
                 if package["name"] not in all_apps:
                     all_apps.append(package["name"])
+
         all_apps.sort()
-        for i, item in enumerate(all_apps, start=1):
-            print(f"{i:{len(str(len(all_apps)))}}. {item}")
-        while True:
-            try:
-                user_input = int(input("Select app to patch: ")) - 1
-                if user_input in range(0, len(all_apps)):
-                    args.app = all_apps[user_input]
-                    break
-                else:
-                    raise IndexError()
-            except IndexError:
-                print("Invalid selection.")
+        args.app = select_item("Select app to patch: ", all_apps)
 
     for key in data:
         # include universal patches
@@ -429,27 +422,20 @@ def main():
                     recomended_version = package["versions"][-1]
                     print("Presuming recomended youtube version:", recomended_version)
     
+    # should check here if the app is right when using -l, and ignore it if selected app differs from local apk
+    # also dont run if user already provided apk file
     if not args.local:
         get_apk(args.app, recomended_version)
 
-    all_options = map(lambda x: f'{x["name"]} - {x["description"]}' if x["use"] else "(-) " + f'{x["name"]} - {x["description"]}', app_patches)
+    all_options = list(map(lambda x: f'{x["name"]} - {x["description"]}' if x["use"] else f'(-) {x["name"]} - {x["description"]}', app_patches))
 
-    for i, item in enumerate(all_options, start=1):
-        # print(f"{i}. {item}")
-        print(f"{i:{len(str(len(app_patches)))}}. {item}")
-
-    print('"(-)" prefix means excluded by defalut')
-    while True:
-        try:
-            user_input = input("Select patches e.g. 1,4,7,8-12,14 or empty for default: ")
-            selected_options = select_options(user_input, app_patches)
-            break
-        except IndexError:
-            print("Invalid selection.")
+    selected_options = select_multiple_items("Select patches (e.g. 4,7-12,1) or empty for default: ", all_options)
 
     keystore_file = "../revanced.keystore" if os.path.exists(os.path.join(os.path.dirname(os.getcwd()), "revanced.keystore")) else "revanced.keystore"
-    base_command = ["java", "-jar", "cli.jar", "patch", "--patch-bundle=patches.jar", "--merge=integrations.apk", "--keystore=" + keystore_file,
-                    f"--out=../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk", "apk.apk"]
+    output_file = f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
+    apk_file = "apk.apk" # getapkfile() or "apk.apk"
+    base_command = ["java", "-jar", "cli.jar", "patch", "--patch-bundle=patches.jar", "--merge=integrations.apk", f"--keystore={keystore_file}",
+                    f"--out={output_file}", apk_file]
 
     # cli 4.0 doesn't work with old keys
     # https://github.com/ReVanced/revanced-cli/issues/277
@@ -460,13 +446,18 @@ def main():
     compatibility_patch_new_key = ["--alias=ReVanced Key", "--keystore-entry-password=", "--keystore-password="]
 
     if selected_options:
-        user_input = get_selection_goal()
+        choices = [
+            "Only include the selected patches",
+            "Exclude the selected patches (from the default ones)",
+            "Include selected patches (together with default ones)"
+        ]
+        selected_item = choices.index(select_item("Enter the number of your choice: ", choices))
 
-        if user_input == 1:
+        if selected_item == 0:
             base_command.append("--exclusive")
             for patch in selected_options:
                 base_command.append(f'--include={patch["name"]}')
-        elif user_input == 2:
+        elif selected_item == 1:
             for patch in selected_options:
                 base_command.append(f'--exclude={patch["name"]}')
         else:
