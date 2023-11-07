@@ -55,7 +55,8 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
                 print("Attempting with fallback url")
                 return get_github_download_links(fallback_url)
             else:
-                raise Exception("Failed to download one or more patching tools")
+                print("Exiting: Failed to get download urls for one or more patching tools")
+                sys.exit(1)
 
     def files_still_there():
         return (
@@ -112,24 +113,19 @@ def get_apk(package_name: str, version: str):
     current_request = 0
     total_requests = 0
     last_progress_msg = ""
-    bad_initial_progress_call = ""
     url = ""
 
     # update one line as we navigate apk host sites, looking for download urls
     # this function should be called once before the first request with the total number of requests, and then called empty before each subsequent request
     # reuse url for the request link, call with over="fail message" to move on to the next line
     def progress(steps: int=0, over: str=""):
-        nonlocal current_request, total_requests, last_progress_msg, bad_initial_progress_call
+        nonlocal current_request, total_requests, last_progress_msg
         if steps > 0:
             current_request = 1
             total_requests = steps
-            bad_initial_progress_call = ""
         else:
             current_request += 1
-            if not bad_initial_progress_call and current_request > total_requests:
-                bad_initial_progress_call = "fix your initial get_apk progress call!"
-        # msg = f"Fetching [{current_request}/{total_requests}]: {f"[{bad_initial_progress_call}]{ over or url}" if bad_initial_progress_call else over or url}"
-        msg = over or f"Fetching [{current_request}/{total_requests}]: {f"[{bad_initial_progress_call}]{url}" if bad_initial_progress_call else url}"
+        msg = over or f"Fetching [{current_request}/{total_requests}]: {url}"
         spaces_to_clear = " " * len(last_progress_msg)
         print(f"\r{spaces_to_clear}", end="", flush=True)
         last_progress_msg = msg
@@ -145,9 +141,9 @@ def get_apk(package_name: str, version: str):
     # https://apkcombo.com/youtube/com.google.android.youtube/download/phone-18.38.44-apk case in point, whereas apkmirror provides the normal apk
     def apkcombo():
         nonlocal url
-        # this is either 404 or redirects to the app page with the specified version        [[[[[[[[[do this for apkpure as well, pkg search redirect works]]]]]]]]]
+        # this is either 404 or redirects to the app page with the specified version
         url = "https://apkcombo.com/search/" + package_name + "/download/" + ("apk" if version == "" else f"phone-{version}-apk")
-        progress()
+        progress(2)
         response = requests.get(url, headers={"Referer": "https://apkcombo.com/"})
         if response.status_code == 404:
             progress(over="app not found on apkcombo!")
@@ -161,7 +157,7 @@ def get_apk(package_name: str, version: str):
             regex2 = r'(?<=a href=")/r2.*\.apk[^"]+'
             url_fist_part = re.search(regex, response.text) or re.search(regex2, response.text)
             if url_fist_part == None:
-                print("\ndid not find standalone apk for this app/version on apkcombo, doesn't exits?:", url)
+                progress(over="did not find standalone apk for this app/version on apkcombo, doesn't exits? " + url)
                 return
             else:
                 url_fist_part = url_fist_part.group()
@@ -192,7 +188,7 @@ def get_apk(package_name: str, version: str):
         if package_name in supported_apps:
             url = supported_apps[package_name]
             if not version:
-                progress()
+                progress(5)
                 response = requests.get(url, headers=headers)
                 if response.status_code == 200:
                     # this is the first list item and should be the latest version available
@@ -209,7 +205,7 @@ def get_apk(package_name: str, version: str):
                 url = url + slug + f"-{version.replace('.', '-').replace(':', '')}-release"
             # url should look like this now: https://www.apkmirror.com/apk/google-inc/youtube/youtube-18-43-45-release/
             regex = r'(?<=apkm-badge">APK).*?href="([^"]+)'
-            progress()
+            progress(4)
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 # https://www.apkmirror.com/apk/google-inc/youtube/youtube-18-38-44-release/youtube-18-38-44-2-android-apk-download/
@@ -248,6 +244,10 @@ def get_apk(package_name: str, version: str):
             response = requests.get(url, headers=headers)
             # print(response, response.text)
             # rate limited rn, if this is 200 take the first search result and recall apkmirror with it else print apkmirror doesnt have it
+
+    def apkpure():
+        pass
+        # can search this directly with package name like apkcombo
 
     localversion = []
     if os.path.exists(".apk_version.txt") and os.path.exists("apk.apk"):
@@ -324,11 +324,11 @@ def check_java():
         if version >= 11:
             return
         else:
-            print("found incompatible java verson, revanced requires at least java 11")
-            subprocess.run(cmd)
+            print("Exiting: Found incompatible java verson, revanced requires at least java 11")
+            subprocess.run(cmd) # show user's java version before exiting
             sys.exit(1)
     except FileNotFoundError:
-        print("java not found, install jdk11 or higher")
+        print("Exiting: Java not found, install jdk11 or higher")
         sys.exit(1)
 
 def check_keystore_type(keystore_file: str):
