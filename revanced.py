@@ -240,9 +240,31 @@ def get_apk(package_name: str, version: str):
             print("apkmirror failed at url:", url)
         else:
             url = f'https://www.apkmirror.com/?post_type=app_release&searchtype=app&s="{package_name}"'
+            regex = r'<div class="listWidget">.<div class="widgetHeader search-header">.*?<div class="listWidget">'
+            progress(1)
             response = requests.get(url, headers=headers)
-            # print(response, response.text)
-            # rate limited rn, if this is 200 take the first search result and recall apkmirror with it else print apkmirror doesnt have it
+            if response.status_code == 200:
+                app_search_result_html = re.search(regex, response.text, re.S).group()
+                regex = r'<h5 title="([^"]+).*?href="([^"]+).*?<\/h5>'
+                if app_search_result_html:
+                    if "No results found matching your query" in app_search_result_html:
+                        print("no results on apkmirror for " + package_name)
+                        return
+                    search_results = re.findall(regex, app_search_result_html, re.S)
+                    if search_results:
+                        if len(search_results) > 1:
+                            filter_function = lambda x: f"{x[0]} : {x[1]}"
+                            item = select_item("Select apkmirror search result (empty for none): ", search_results, filter_function, True)
+                            if item:
+                                url = base + item[1]
+                                return apkmirror(url)
+                            else:
+                                return
+                        # don't ask if it's just one result
+                        url = base + search_results[0][1]
+                        print(f"found apkmirror url for {package_name}: {url}")
+                        return apkmirror(url)
+            print(f"failed to search for {package_name} on apkmirror")
 
     def apkpure():
         pass
