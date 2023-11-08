@@ -272,13 +272,17 @@ def get_apk(package_name: str, version: str):
 
     log_version_on_success()
 
-def select_item(message: str, item_list: list):
-    for index, item in enumerate(item_list, start=1):
+def select_item(message: str, item_list: list, map_function=None, allow_empty: bool=False):
+    printable_item_list = list(map(map_function, item_list)) if map_function else None
+    for index, item in enumerate(printable_item_list or item_list, start=1):
         print(f"{index:{len(str(len(item_list)))}}. {item}")
 
     while True:
         try:
-            choice = int(input(message))
+            choice = input(message)
+            if choice == "" and allow_empty:
+                return None
+            choice = int(choice)
             if 1 <= choice <= len(item_list):
                 return item_list[choice - 1]
             else:
@@ -286,7 +290,7 @@ def select_item(message: str, item_list: list):
         except ValueError:
             print("Please enter a valid number.")
 
-def select_multiple_items(message: str, item_list: list, map_function=None):
+def select_multiple_items(message: str, item_list: list, map_function=None, allow_empty: bool=False):
     printable_item_list = list(map(map_function, item_list)) if map_function else None
     for index, item in enumerate(printable_item_list or item_list, start=1):
         print(f"{index:{len(str(len(item_list)))}}. {item}")
@@ -297,6 +301,8 @@ def select_multiple_items(message: str, item_list: list, map_function=None):
         indices = set()
 
         try:
+            if selection == "" and allow_empty:
+                return []
             for part in selection.split(','):
                 if '-' in part:
                     start, end = map(int, part.split('-'))
@@ -429,8 +435,9 @@ def main():
     if not args.local:
         get_apk(args.app, recomended_version)
 
+    print('"(-)" prefix means not used by default')
     filter_function = lambda x: f'{x["name"]} - {x["description"]}' if x["use"] else f'(-) {x["name"]} - {x["description"]}'
-    selected_options = select_multiple_items("Select patches (e.g. 4,7-12,1) or empty for default: ", app_patches, filter_function)
+    selected_options = select_multiple_items("Select patches (e.g. 4,7-12,1) or empty for default: ", app_patches, filter_function, True)
 
     keystore_file = "../revanced.keystore" if os.path.exists(os.path.join(os.path.dirname(os.getcwd()), "revanced.keystore")) else "revanced.keystore"
     output_file = f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
