@@ -133,10 +133,6 @@ def get_apk(package_name: str, version: str):
         if over or current_request >= total_requests:
             print()
     
-    def log_version_on_success():
-        with open(".apk_version.txt", "w") as file:
-            file.write(f"{package_name}-{version or 'latest'}")
-
     # apkcombo is a good source but they shill their own apk installer with xapks as the only option sometimes
     # https://apkcombo.com/youtube/com.google.android.youtube/download/phone-18.38.44-apk case in point, whereas apkmirror provides the normal apk
     def apkcombo():
@@ -270,29 +266,35 @@ def get_apk(package_name: str, version: str):
         pass
         # can search this directly with package name like apkcombo
 
+    sources = [
+        apkcombo,
+        apkmirror,
+        # apkpure
+    ]
+
     localversion = []
-    if os.path.exists(".apk_version.txt") and os.path.exists("apk.apk"):
+    if os.path.exists(".apk_version.txt") and os.path.exists("app.apk"):
         with open(".apk_version.txt", "r") as file:
             localversion = [file.readline().strip() for _ in range(1)]
 
     if f"{package_name}-{version}" in localversion:
-        print("apk.apk is up-to-date")
+        print("app.apk is up-to-date")
         return
 
     with open(".apk_version.txt", "w") as file:
         pass
 
-    apk_websites = [apkcombo, apkmirror]
-    random.shuffle(apk_websites)
+    random.shuffle(sources)
     download_link = None
     i = 0
-    while download_link == None and i in range(0, len(apk_websites)):
-        download_link = apk_websites[i]()
+    while download_link == None and i in range(0, len(sources)):
+        download_link = sources[i]()
         i +=1
     assert download_link, "Completely failed to download apk"
-    download_file(download_link, "apk.apk")
+    download_file(download_link, "app.apk")
 
-    log_version_on_success()
+    with open(".apk_version.txt", "w") as file:
+        file.write(f"{package_name}-{version or 'latest'}")
 
 def select_item(message: str, item_list: list, map_function=None, allow_empty: bool=False):
     printable_item_list = list(map(map_function, item_list)) if map_function else None
@@ -364,22 +366,17 @@ def check_keystore_type(keystore_file: str):
                "-providerpath", "../bcprov-jdk18on-176.jar", "-storepass", ""]
     process = subprocess.run(command, capture_output=True, text=True)
 
-    # print("Checking keystore file --> ", end="")
-
     if process.returncode == 1 and "keytool error: java.lang.Exception: Keystore file does not exist:" in process.stdout:
-        # print("Keystore file does not exist yet, revanced cli will generate it in the patching process")
         type = "to_be_generated"
         print(f"\t[{type}]")
         return type
     
     if process.returncode == 0 and "Your keystore contains 1 entry" in process.stdout:
         if "alias," in process.stdout:
-            # print("Old revanced key")
             type = "old"
             print(f"\t[{type}]")
             return type
         if "ReVanced Key," in process.stdout:
-            # print("New revanced key")
             type = "new"
             print(f"\t[{type}]")
             return type
@@ -463,7 +460,7 @@ def main():
 
     keystore_file = "../revanced.keystore" if os.path.exists(os.path.join(os.path.dirname(os.getcwd()), "revanced.keystore")) else "revanced.keystore"
     output_file = f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
-    apk_file = "apk.apk" # getapkfile() or "apk.apk"
+    apk_file = "app.apk" # getapkfile() or "app.apk" //// edit get_apk to return app.apk or the selected user provided apk
     base_command = ["java", "-jar", "cli.jar", "patch", "--patch-bundle=patches.jar", "--merge=integrations.apk", f"--keystore={keystore_file}",
                     f"--out={output_file}", apk_file]
 
