@@ -332,31 +332,34 @@ def check_java():
         sys.exit(1)
 
 def check_keystore_type(keystore_file: str):
-    print("Using keystore file:", os.path.abspath(keystore_file))
+    print("Using keystore file:", os.path.abspath(keystore_file), end="")
     command = ["keytool", "-list", "-keystore", keystore_file, "-storetype", "BKS", "-provider", "org.bouncycastle.jce.provider.BouncyCastleProvider",
                "-providerpath", "../bcprov-jdk18on-176.jar", "-storepass", ""]
     process = subprocess.run(command, capture_output=True, text=True)
 
-    print("Checking keystore file --> ", end="")
+    # print("Checking keystore file --> ", end="")
 
     if process.returncode == 1 and "keytool error: java.lang.Exception: Keystore file does not exist:" in process.stdout:
-        print("Keystore file does not exist yet, revanced cli will generate it in the patching process")
-        return "to_be_generated"
+        # print("Keystore file does not exist yet, revanced cli will generate it in the patching process")
+        type = "to_be_generated"
+        print(f"\t[{type}]")
+        return type
     
     if process.returncode == 0 and "Your keystore contains 1 entry" in process.stdout:
         if "alias," in process.stdout:
-            print("Old revanced key")
-            return "old"
+            # print("Old revanced key")
+            type = "old"
+            print(f"\t[{type}]")
+            return type
         if "ReVanced Key," in process.stdout:
-            print("New revanced key")
-            return "new"
-
-    if process.returncode == 0 and "Your keystore contains 2 entries" in process.stdout and "alias," in process.stdout and "ReVanced Key," in process.stdout:
-        print("Fixed keystore (see -h)")
-        return "fixed"
+            # print("New revanced key")
+            type = "new"
+            print(f"\t[{type}]")
+            return type
 
     if process.returncode == 1 and 'java.lang.Exception: Provider "org.bouncycastle.jce.provider.BouncyCastleProvider" not found' in process.stdout:
-        print("Keycheck failed as BouncyCastle jar file is missing from the working directory")
+        print("\nKeycheck failed as BouncyCastle jar file is missing from the working directory")
+        return "unexpected"
 
     print("Unexpected key, patching might fail")
     return "unexpected"
