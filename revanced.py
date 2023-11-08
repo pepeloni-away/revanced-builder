@@ -368,6 +368,7 @@ def main():
                                      epilog='The script looks for a general "revanced.keystore" file inside the working directory. ' +
                                      "Both pre and past revanced-cli4.0 keys are supported")
     parser.add_argument("-l", "--local", action="store_true", help="build using local files to avoid unnecessary github api requests(max 60/h) and re-downloads")
+    parser.add_argument("-e", "--export", action="store_true", help="stop after printing the patch command instead of running it")
     parser.add_argument("repository", type=str, default=default_repo, nargs="?",
                         help="github username to download revanced-cli, patches and integrations form, " +
                         "also acts as download folder (default and fallback: %(default)s)")
@@ -471,7 +472,9 @@ def main():
     printable_command = [f'{item.split("=")[0]}="{item.split("=")[1]}"' if " " in item else item for item in base_command]
     printable_command = [f'{item.split("=")[0]}=""' if re.match(r".*=$", item) else item for item in printable_command]
     print("Running:", " ".join(printable_command))
-    subprocess.run(base_command)
+
+    if not args.export:
+        subprocess.run(base_command)
 
 if __name__ == "__main__":
     try:
