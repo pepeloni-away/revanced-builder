@@ -109,12 +109,20 @@ def update_revanced(repo: str, fallback_repo: str, cli: str, patches: str, integ
     with open(".revanced_versions.txt", "w") as file:
         file.write("\n".join([cli_version, patches_version, integrations_version]))
 
-def get_apk(package_name: str, version: str):
+def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: bool):
+    default_apk = "app.apk"
+    url = ""
+
+    def scan_for_apk_files(folder_path):
+        files = os.listdir(folder_path)
+
+        apk_files = [file for file in files if file.endswith('.apk')]
+
+        return apk_files
+
     current_request = 0
     total_requests = 0
     last_progress_msg = ""
-    url = ""
-
     # update one line as we navigate apk host sites, looking for download urls
     # this function should be called once before the first request with the total number of requests, and then called empty before each subsequent request
     # reuse url for the request link, call with over="<fail message>" to move on a new line early
@@ -272,14 +280,39 @@ def get_apk(package_name: str, version: str):
         # apkpure
     ]
 
+    if scan_folder_for_apks:
+        # scan script folder, not repo folder inside it
+        folder = os.path.dirname(os.getcwd())
+        apks = scan_for_apk_files(folder)
+        apk = None
+        if len(apks) == 1:
+            apk = apks[0]
+        if len(apks) > 1:
+            apk = select_item("Select apk to use (empty for none): ", apks, allow_empty=True)
+
+        if apk:
+            apk = f"../{apk}"
+            print("Using user-provided apk file at:", os.path.abspath(apk))
+            return apk
+        print("No user-provided apk files found in the working directory")
+
     localversion = []
-    if os.path.exists(".apk_version.txt") and os.path.exists("app.apk"):
+    if os.path.exists(".apk_version.txt") and os.path.exists(default_apk):
         with open(".apk_version.txt", "r") as file:
             localversion = [file.readline().strip() for _ in range(1)]
 
+    # this is inside get_apk to also allow user-provided apks when using --local
+    if local:
+        if package_name not in localversion[0]:
+            print(f"Warning: Local app ({localversion[0]}) differs from current one ({package_name})")
+            fn = lambda x: f"Download {package_name}" if x else "Patch anyways (only universal patches will apply, buld name will be wrong)"
+            ignore_local = select_item("Your choice (empy for download): ", [True, False], fn, True)
+            if ignore_local == False:
+                return default_apk
+
     if f"{package_name}-{version}" in localversion:
         print("app.apk is up-to-date")
-        return
+        return default_apk
 
     with open(".apk_version.txt", "w") as file:
         pass
@@ -291,10 +324,12 @@ def get_apk(package_name: str, version: str):
         download_link = sources[i]()
         i +=1
     assert download_link, "Completely failed to download apk"
-    download_file(download_link, "app.apk")
+    download_file(download_link, default_apk)
 
     with open(".apk_version.txt", "w") as file:
         file.write(f"{package_name}-{version or 'latest'}")
+
+    return default_apk
 
 def select_item(message: str, item_list: list, map_function=None, allow_empty: bool=False):
     printable_item_list = list(map(map_function, item_list)) if map_function else None
@@ -390,6 +425,8 @@ def check_keystore_type(keystore_file: str):
 
 def main():
     default_repo = "revanced"
+    default_app = "com.google.android.youtube"
+    non_default_app = False
 
     parser = argparse.ArgumentParser(description="Build patched apps with ReVanced tools",
                                      epilog='The script looks for a general "revanced.keystore" file inside the working directory. ' +
@@ -402,12 +439,15 @@ def main():
     parser.add_argument("--cli", type=str, default=None, help="github username to download revanced-cli from (priority over repository)")
     parser.add_argument("--patches", type=str, default=None, help="github username to download revanced-patches from (priority over repository)")
     parser.add_argument("--integrations", type=str, default=None, help="github username to download revanced-integrations from (priority over repository)")
-    parser.add_argument("-a", "--app", "--package", nargs="?", const="", default="com.google.android.youtube",
+    parser.add_argument("-a", "--app", "--package", nargs="?", const="", default=default_app,
                         help="specify an app to patch or be prompted to choose based on patches (default: %(default)s). " +
                         "The script will scan the working directory for apk files before trying to download when this option is used. " +
                         "No checks are done with this option, you can provide any apk and use at least the universal patches on it")
 
     args = parser.parse_args()
+
+    if args.app != default_app:
+        non_default_app = True
 
     check_java()
 
@@ -447,30 +487,11 @@ def main():
                 # this isn't optimal but so far patches were updated all at once so it works
                 if not recomended_version and package["versions"]:
                     recomended_version = package["versions"][-1]
-                    print("Presuming recomended youtube version:", recomended_version)
+                    print(f"Presuming recomended {'app' if non_default_app else "youtube"} version: {recomended_version}")
     
-    # should check here if the app is right when using -l, and ignore it if selected app differs from local apk
-    # also dont run if user already provided apk file
-    if not args.local:
-        get_apk(args.app, recomended_version)
-
     print('"(-)" prefix means not used by default')
     filter_function = lambda x: f'{x["name"]} - {x["description"]}' if x["use"] else f'(-) {x["name"]} - {x["description"]}'
     selected_options = select_multiple_items("Select patches (e.g. 4,7-12,1) or empty for default: ", app_patches, filter_function, True)
-
-    keystore_file = "../revanced.keystore" if os.path.exists(os.path.join(os.path.dirname(os.getcwd()), "revanced.keystore")) else "revanced.keystore"
-    output_file = f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
-    apk_file = "app.apk" # getapkfile() or "app.apk" //// edit get_apk to return app.apk or the selected user provided apk
-    base_command = ["java", "-jar", "cli.jar", "patch", "--patch-bundle=patches.jar", "--merge=integrations.apk", f"--keystore={keystore_file}",
-                    f"--out={output_file}", apk_file]
-
-    # cli 4.0 doesn't work with old keys
-    # https://github.com/ReVanced/revanced-cli/issues/277
-    # https://github.com/ReVanced/revanced-cli/issues/272
-
-    # we are in a situation where revanced-cli only works with new keys and inotia00's fork only works with old keys.....
-    compatibility_patch_old_key = ["--alias=alias", "--keystore-entry-password=ReVanced", "--keystore-password=ReVanced"]
-    compatibility_patch_new_key = ["--alias=ReVanced Key", "--keystore-entry-password=", "--keystore-password="]
 
     if selected_options:
         choices = [
@@ -490,6 +511,20 @@ def main():
         else:
             for patch in selected_options:
                 base_command.append(f'--include={patch["name"]}')
+
+    keystore_file = "../revanced.keystore" if os.path.exists(os.path.join(os.path.dirname(os.getcwd()), "revanced.keystore")) else "revanced.keystore"
+    output_file = f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
+    apk_file = get_apk(args.app, recomended_version, args.local, non_default_app)
+    base_command = ["java", "-jar", "cli.jar", "patch", "--patch-bundle=patches.jar", "--merge=integrations.apk", f"--keystore={keystore_file}",
+                    f"--out={output_file}", apk_file]
+
+    # cli 4.0 doesn't work with old keys
+    # https://github.com/ReVanced/revanced-cli/issues/277
+    # https://github.com/ReVanced/revanced-cli/issues/272
+
+    # we are in a situation where revanced-cli only works with new keys and inotia00's fork only works with old keys.....
+    compatibility_patch_old_key = ["--alias=alias", "--keystore-entry-password=ReVanced", "--keystore-password=ReVanced"]
+    compatibility_patch_new_key = ["--alias=ReVanced Key", "--keystore-entry-password=", "--keystore-password="]
 
     key_type = check_keystore_type(keystore_file)
     if key_type == "old":
