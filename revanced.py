@@ -117,7 +117,7 @@ def get_apk(package_name: str, version: str):
 
     # update one line as we navigate apk host sites, looking for download urls
     # this function should be called once before the first request with the total number of requests, and then called empty before each subsequent request
-    # reuse url for the request link, call with over="fail message" to move on to the next line
+    # reuse url for the request link, call with over="<fail message>" to move on a new line early
     def progress(steps: int=0, over: str=""):
         nonlocal current_request, total_requests, last_progress_msg
         if steps > 0:
@@ -153,7 +153,7 @@ def get_apk(package_name: str, version: str):
             # ?ecp=Y29tLmdvb2dsZS5hbmRyb2lkLnlvdXR1YmUvMTguNDMuNDEvMTU0MDg4NTk1Mi41ODU3M2FmOGFhY2U5YjAxZmY0NTQwMDFhNGI4NDM2MzVhNGM0YjNhLmFwaw==
             # &iat=1699141714&sig=a4201aefd1136aaf098d1d5333988fa3&size=131564206&from=cf&version=old&lang=en
             regex = r'(?<=a href=")https://download\.apkcombo\.com/.*\.apk\?[^"]+'
-            # for /r2?u=https..... external download links?, found at least on com.zhiliaoapp.musically
+            # for /r2?u=https..... external download links?, found at least on com.zhiliaoapp.musically, guardian tales
             regex2 = r'(?<=a href=")/r2.*\.apk[^"]+'
             url_fist_part = re.search(regex, response.text) or re.search(regex2, response.text)
             if url_fist_part == None:
@@ -162,8 +162,7 @@ def get_apk(package_name: str, version: str):
             else:
                 url_fist_part = url_fist_part.group()
                 if re.match(r"^http", url_fist_part) is None:
-                    # this is partly urlencoded, requests should handle it though
-                    url_fist_part = "https://download.apkcombo.com" + url_fist_part
+                    url_fist_part = "https://apkcombo.com" + url_fist_part
                 url = "https://apkcombo.com/checkin"
                 progress()
                 response = requests.get(url)
