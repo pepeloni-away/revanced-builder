@@ -689,6 +689,7 @@ def main():
         True,
     )
 
+    command_patches = []
     if selected_options:
         choices = [
             "Only include the selected patches",
@@ -700,15 +701,15 @@ def main():
         )
 
         if selected_item == 0:
-            base_command.append("--exclusive")
+            command_patches.append("--exclusive")
             for patch in selected_options:
-                base_command.append(f'--include={patch["name"]}')
+                command_patches.append(f'--include={patch["name"]}')
         elif selected_item == 1:
             for patch in selected_options:
-                base_command.append(f'--exclude={patch["name"]}')
+                command_patches.append(f'--exclude={patch["name"]}')
         else:
             for patch in selected_options:
-                base_command.append(f'--include={patch["name"]}')
+                command_patches.append(f'--include={patch["name"]}')
 
     keystore_file = (
         "../revanced.keystore"
@@ -754,6 +755,8 @@ def main():
         base_command += compatibility_patch_old_key
     if key_type == "new":
         base_command += compatibility_patch_new_key
+
+    base_command += command_patches
 
     # quotes around patch names that contain spaces
     printable_command = [
