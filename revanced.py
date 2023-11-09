@@ -625,6 +625,7 @@ def main():
 
         all_apps.sort()
         args.app = select_item("Select app to patch: ", all_apps)
+        print("Working with:", args.app)
 
     for key in data:
         # include universal patches
@@ -720,10 +721,19 @@ def main():
     if key_type == "new":
         base_command += compatibility_patch_new_key
 
+    # quotes around patch names that contain spaces
     printable_command = [
-        f'{item.split("=")[0]}="{item.split("=")[1]}"' if " " in item else item
+        f'{item.split("=")[0]}="{item.split("=")[1]}"'
+        if " " in item and "=" in item and item.startswith("--")
+        else item
         for item in base_command
     ]
+    # for user-provided apks that have spaces
+    printable_command = [
+        f'"{item}"' if " " in item and not item.startswith("--") else item
+        for item in printable_command
+    ]
+    # add empty quotes to possibly blank arguments like keystore-password
     printable_command = [
         f'{item.split("=")[0]}=""' if re.match(r".*=$", item) else item
         for item in printable_command
