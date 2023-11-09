@@ -336,14 +336,40 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
                         return apkmirror(url)
             print(f"failed to search for {package_name} on apkmirror")
 
+    # apkpure's downside is that they don't keep many old versions, some revanced recomended versions are pretty old and won't be found here
     def apkpure():
-        pass
-        # can search this directly with package name like apkcombo
+        nonlocal url
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+        }
+
+        url = (
+            "https://apkpure.com/search/"
+            + package_name
+            + ("/download" if not version else f"/download/{version}")
+        )
+        progress(2)
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            regex = r'https://d\.apkpure\.com/b/APK/.*?\?versionCode=\d+.*?(?=")'
+            match = re.search(regex, response.text)
+            if match:
+                url = match.group().replace("&amp;", "&")
+                progress()
+                response = requests.get(url, headers=headers, allow_redirects=False)
+                if response.status_code == 302:
+                    url = response.headers["Location"]
+                    return url
+            # print("did not find apk download link on apkpure")
+            progress(over="did not find apk download link on apkpure")
+        else:
+            # print("app not found on apkpure")
+            progress(over="app not found on apkpure")
 
     sources = [
         apkcombo,
         apkmirror,
-        # apkpure
+        apkpure,
     ]
 
     if scan_folder_for_apks:
