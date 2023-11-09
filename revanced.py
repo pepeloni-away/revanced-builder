@@ -209,8 +209,10 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
                     # fp=e1aa154442d600ccbfa78e01a042344e&ip=yourip
                     url_second_part = response.text
                     return url_fist_part + "&" + url_second_part
-        print("apkcombo failed at url:", url)
+        progress(over="apkcombo failed at url: " + url)
 
+    # apkmirror doesn't auto-redirect package name searches so we have to deal with scraping the search page
+    # also hosts some patched apps and watch/tv versions that show up as results when searching for the regular app packages, thus the need for user choice
     def apkmirror(found_app_url: str = ""):
         nonlocal url
         base = "https://www.apkmirror.com"
@@ -302,18 +304,19 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
                             )
                             if response.status_code == 302:
                                 return response.headers["Location"]
-            print("apkmirror failed at url:", url)
+            progress(over="apkmirror failed at url: " + url)
         else:
             url = f'https://www.apkmirror.com/?post_type=app_release&searchtype=app&s="{package_name}"'
             regex = r'<div class="listWidget">.<div class="widgetHeader search-header">.*?<div class="listWidget">'
-            progress(1)
+            progress(5)
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 app_search_result_html = re.search(regex, response.text, re.S).group()
                 regex = r'<h5 title="([^"]+).*?href="([^"]+).*?<\/h5>'
                 if app_search_result_html:
                     if "No results found matching your query" in app_search_result_html:
-                        print("no results on apkmirror for " + package_name)
+                        # print("no results on apkmirror for " + package_name)
+                        progress(over="no results on apkmirror for " + package_name)
                         return
                     search_results = re.findall(regex, app_search_result_html, re.S)
                     if search_results:
@@ -332,9 +335,9 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
                                 return
                         # don't ask if it's just one result
                         url = base + search_results[0][1]
-                        print(f"found apkmirror url for {package_name}: {url}")
+                        # print(f"found apkmirror url for {package_name}: {url}")
                         return apkmirror(url)
-            print(f"failed to search for {package_name} on apkmirror")
+            progress(over=f"failed to search for {package_name} on apkmirror")
 
     # apkpure's downside is that they don't keep many old versions, some revanced recomended versions are pretty old and won't be found here
     def apkpure():
@@ -360,10 +363,11 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
                 if response.status_code == 302:
                     url = response.headers["Location"]
                     return url
-            # print("did not find apk download link on apkpure")
-            progress(over="did not find apk download link on apkpure")
+            progress(
+                over="did not find standalone apk for this app/version on apkpure, does it exits? "
+                + url
+            )
         else:
-            # print("app not found on apkpure")
             progress(over="app not found on apkpure")
 
     sources = [
@@ -380,15 +384,19 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
         if len(apks) == 1:
             apk = apks[0]
         if len(apks) > 1:
-            apk = select_item(
-                "Select apk to use (empty for none): ", apks, allow_empty=True
+            apk = (
+                select_item(
+                    "Select apk to use (empty for none): ", apks, allow_empty=True
+                )
+                or False
             )
 
         if apk:
             apk = f"../{apk}"
             print("Using user-provided apk file at:", os.path.abspath(apk))
             return apk
-        print("No user-provided apk files found in the working directory")
+        if apk != False:  # if user selected none
+            print("No user-provided apk files found in the working directory")
 
     localversion = []
     if os.path.exists(".apk_version.txt") and os.path.exists(default_apk):
@@ -404,7 +412,7 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
             fn = (
                 lambda x: f"Download {package_name}"
                 if x
-                else "Patch anyways (only universal patches will apply, buld name will be wrong)"
+                else "Patch anyways (only universal patches will apply, if any, and buld name will be wrong)"
             )
             ignore_local = select_item(
                 "Your choice (empy for download): ", [True, False], fn, True
