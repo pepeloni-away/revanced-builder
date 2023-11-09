@@ -405,7 +405,9 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
 
     # this is inside get_apk to also allow user-provided apks when using --local
     if local:
-        if package_name not in localversion[0]:
+        if not localversion:
+            print("No local apk file available, downloading...")
+        elif package_name not in localversion[0]:
             print(
                 f"Warning: Local app ({localversion[0]}) differs from current one ({package_name})"
             )
