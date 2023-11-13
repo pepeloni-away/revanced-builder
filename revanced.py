@@ -572,10 +572,27 @@ def check_keystore_type(keystore_file: str):
     return "unexpected"
 
 
+def handleTermux():
+    # could import platform and check platform.machine here, and use a different aapt2 file for each architecture
+    # https://github.com/ReVanced/revanced-cli/blob/main/docs/0_prerequisites.md
+    # problem is i don't have armv7 or x86 devices to test this, so only armv8 is supported for now
+    if os.path.exists("aapt2"):
+        if not os.access("aapt2", os.X_OK):
+            subprocess.run(["chmod", "+x", "aapt2"], capture_output=True)
+            if not os.access("aapt2", os.X_OK):
+                print(
+                    "Can't grant execute permission to aapt2. I don't know why but this can happen if the repo is cloned "
+                    + "outside termux root, like inside the download folder. (tested on android 10)"
+                )
+    else:
+        print("aapt2 file is missing, patching will probably fail")
+
+
 def main():
     default_repo = "revanced"
     default_app = "com.google.android.youtube"
     non_default_app = False
+    is_termux = False
 
     parser = argparse.ArgumentParser(
         description="Build patched apps with ReVanced tools",
@@ -636,6 +653,10 @@ def main():
 
     if args.app != default_app:
         non_default_app = True
+
+    if "com.termux" in sys.prefix:
+        is_termux = True
+        handleTermux()
 
     check_java()
 
@@ -761,6 +782,9 @@ def main():
         base_command += compatibility_patch_old_key
     if key_type == "new":
         base_command += compatibility_patch_new_key
+
+    if is_termux:
+        base_command += ["--custom-aapt2-binary=../aapt2"]
 
     base_command += command_patches
 
