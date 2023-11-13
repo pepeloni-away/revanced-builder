@@ -6,6 +6,7 @@ import sys
 import re
 import argparse
 import random
+import shutil
 
 
 def download_file(file_url: str, file_name: str):
@@ -32,11 +33,14 @@ def download_file(file_url: str, file_name: str):
             # Calculate the progress percentage
             progress_percent = (downloaded_bytes / total_size) * 100
 
-            # Print a simple progress bar
-            sys.stdout.write(
-                f"\r[{'#' * int(progress_percent / 2)}{' ' * (50 - int(progress_percent / 2))}] [{int(progress_percent)}%]"
+            max_length = shutil.get_terminal_size()[0] - 10
+            progress = "#" * int(progress_percent / 100 * max_length)
+            empty = " " * (max_length - len(progress))
+
+            # 8 fixed characters here, 4 square brackets, 1 space, 1 percent sign, 2 percent digits
+            print(
+                f"\r[{progress}{empty}] [{int(progress_percent)}%]", end="", flush=True
             )
-            sys.stdout.flush()
     print()
 
 
