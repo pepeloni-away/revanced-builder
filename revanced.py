@@ -109,9 +109,9 @@ def update_revanced(
         f"https://api.github.com/repos/{fallback_repo}/revanced-patches/releases/latest"
     )
 
-    patches_json, dl_url, patches_version, dl_url1 = get_github_download_links(
-        file_url, fallback_url, fallback_url1
-    )
+    temp = get_github_download_links(file_url, fallback_url, fallback_url1)
+    temp = list(filter(lambda x: ".asc" not in x, temp))
+    patches_json, dl_url, patches_version, dl_url1 = temp
     if patches_version in localfiles:
         print("patches.jar is up-to-date")
     else:
@@ -125,9 +125,9 @@ def update_revanced(
     )
     fallback_url1 = f"https://api.github.com/repos/{fallback_repo}/revanced-integrations/releases/latest"
 
-    integrations_version, dl_url = get_github_download_links(
-        file_url, fallback_url, fallback_url1
-    )
+    temp = get_github_download_links(file_url, fallback_url, fallback_url1)
+    temp = list(filter(lambda x: ".asc" not in x, temp))
+    integrations_version, dl_url = temp
     if integrations_version in localfiles:
         print("integrations.apk is up-to-date")
     else:
@@ -415,8 +415,8 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
             print(
                 f"Warning: Local app ({localversion[0]}) differs from current one ({package_name})"
             )
-            fn = (
-                lambda x: f"Download {package_name}"
+            fn = lambda x: (
+                f"Download {package_name}"
                 if x
                 else "Patch anyways (only universal patches will apply, if any, and buld name will be wrong)"
             )
@@ -704,8 +704,8 @@ def main():
                     )
 
     print('"(-)" prefix means not used by default')
-    filter_function = (
-        lambda x: f'{x["name"]} - {x["description"]}'
+    filter_function = lambda x: (
+        f'{x["name"]} - {x["description"]}'
         if x["use"]
         else f'(-) {x["name"]} - {x["description"]}'
     )
@@ -790,9 +790,11 @@ def main():
 
     # quotes around patch names that contain spaces
     printable_command = [
-        f'{item.split("=")[0]}="{item.split("=")[1]}"'
-        if " " in item and "=" in item and item.startswith("--")
-        else item
+        (
+            f'{item.split("=")[0]}="{item.split("=")[1]}"'
+            if " " in item and "=" in item and item.startswith("--")
+            else item
+        )
         for item in base_command
     ]
     # for user-provided apks that have spaces
