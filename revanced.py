@@ -746,7 +746,8 @@ def main():
         else "revanced.keystore"
     )
     output_file = (
-        f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
+        # f'../_builds/revanced({args.repository})[{args.app.replace(".", "_")}].apk'
+        f'revanced({args.repository})[{args.app.replace(".", "_")}].apk'
     )
     apk_file = get_apk(args.app, recomended_version, args.local, non_default_app)
     base_command = [
@@ -754,6 +755,8 @@ def main():
         "-jar",
         "cli.jar",
         "patch",
+        "--options=options.json",
+        # "--resource-cache=.cache", # seems like this can't just be set to a path, it wants a folder with cache already in it. move output file to _builds for now
         "--patch-bundle=patches.jar",
         "--merge=integrations.apk",
         f"--keystore={keystore_file}",
@@ -811,6 +814,7 @@ def main():
 
     if not args.export:
         subprocess.run(base_command)
+        print('Moved to', os.path.abspath(shutil.move(output_file, '../_builds/' + output_file)))
 
 
 if __name__ == "__main__":
