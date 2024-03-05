@@ -46,28 +46,26 @@ def download_file(file_url: str, file_name: str):
 def update_revanced(
     repo: str, fallback_repo: str, cli: str, patches: str, integrations: str
 ):
-    def get_github_download_links(url, fallback_url=None, fallback_url1=None):
-        response = requests.get(url)
-        if response.status_code == 200:
-            response = response.json()
-            links = []
-            for item in response["assets"]:
-                links.append(item["name"])
-                links.append(item["browser_download_url"])
-            return links  # [name, url(, name, url)*]
-        else:
-            print(f"Failed to get download link from {url}")
-            if fallback_url1 and fallback_url != fallback_url1:
-                print("Attempting with fallback url")
-                return get_github_download_links(fallback_url, fallback_url1)
-            elif fallback_url and url != fallback_url:
-                print("Attempting with fallback url")
-                return get_github_download_links(fallback_url)
-            else:
-                print(
-                    "Exiting: Failed to get download urls for one or more patching tools"
-                )
-                sys.exit(1)
+    def get_github_assets(links: list):
+        links = [x for x in links if x is not None]
+        if len(links) > 0:
+            url = links[0]
+            response = requests.get(url)
+            if response.status_code == 200:
+                response = response.json()
+                links = []
+                for item in response["assets"]:
+                    links.append(item["name"])
+                    links.append(item["browser_download_url"])
+                return links  # [name, url(, name, url)*]
+            print(url, 'not found. Attempting fallback')
+
+        links = [x for x in links if x != url]
+        if len(links) > 0:
+            return get_github_assets(links)
+
+        print("Exiting: Failed to get download urls for one or more patching tools")
+        sys.exit(1)
 
     def files_still_there():
         return (
@@ -85,52 +83,87 @@ def update_revanced(
     with open(".revanced_versions.txt", "w") as file:
         pass
 
-    # revanced-cli
-    file_url = (
-        f"https://api.github.com/repos/{cli or repo}/revanced-cli/releases/latest"
+    provided_repo = f"https://api.github.com/repos/{repo}"
+    revanced_repo = f"https://api.github.com/repos/{fallback_repo}"
+    specific_cli = (
+        None
+        if cli is None
+        else (
+            f"https://api.github.com/repos/{cli}/releases/latest"
+            if "/" in cli
+            else f"https://api.github.com/repos/{cli}/revanced-cli/releases/latest"
+        )
     )
-    fallback_url = f"https://api.github.com/repos/{repo}/revanced-cli/releases/latest"
-    fallback_url1 = f"https://api.github.com/repos/{fallback_repo}/revanced-cli/releases/latest"  # the revanced repository
-    cli_version, dl_url = get_github_download_links(
-        file_url, fallback_url, fallback_url1
+    specific_patches = (
+        None
+        if patches is None
+        else (
+            f"https://api.github.com/repos/{patches}/releases/latest"
+            if "/" in patches
+            else f"https://api.github.com/repos/{patches}/revanced-patches/releases/latest"
+        )
+    )
+    specific_integrations = (
+        None
+        if integrations is None
+        else (
+            f"https://api.github.com/repos/{integrations}/releases/latest"
+            if "/" in integrations
+            else f"https://api.github.com/repos/{integrations}/revanced-integrations/releases/latest"
+        )
+    )
+
+    not_asc = lambda x: ".asc" not in x
+
+    # cli
+    cli_version, cli_url = get_github_assets(
+        [
+            specific_cli,
+            provided_repo + "/revanced-cli/releases/latest",
+            revanced_repo + "/revanced-cli/releases/latest",
+        ]
     )
     if cli_version in localfiles:
         print("cli.jar is up-to-date")
     else:
-        download_file(dl_url, "cli.jar")
+        download_file(cli_url, "cli.jar")
 
-    # revanced-patches
-    file_url = f"https://api.github.com/repos/{patches or repo}/revanced-patches/releases/latest"
-    fallback_url = (
-        f"https://api.github.com/repos/{repo}/revanced-patches/releases/latest"
+    # patches
+    patches_json, patches_json_url, patches_version, patches_url = list(
+        filter(
+            not_asc,
+            get_github_assets(
+                [
+                    specific_patches,
+                    provided_repo + "/revanced-patches/releases/latest",
+                    revanced_repo + "/revanced-patches/releases/latest",
+                ]
+            ),
+        )
     )
-    fallback_url1 = (
-        f"https://api.github.com/repos/{fallback_repo}/revanced-patches/releases/latest"
-    )
-
-    temp = get_github_download_links(file_url, fallback_url, fallback_url1)
-    temp = list(filter(lambda x: ".asc" not in x, temp))
-    patches_json, dl_url, patches_version, dl_url1 = temp
     if patches_version in localfiles:
         print("patches.jar is up-to-date")
     else:
-        download_file(dl_url, "patches.json")
-        download_file(dl_url1, "patches.jar")
+        download_file(patches_json_url, "patches.json")
+        download_file(patches_url, "patches.jar")
 
-    # revanced-integrations
-    file_url = f"https://api.github.com/repos/{integrations or repo}/revanced-integrations/releases/latest"
-    fallback_url = (
-        f"https://api.github.com/repos/{repo}/revanced-integrations/releases/latest"
+    # integrations
+    integrations_version, integrations_url = list(
+        filter(
+            not_asc,
+            get_github_assets(
+                [
+                    specific_integrations,
+                    provided_repo + "/revanced-integrations/releases/latest",
+                    revanced_repo + "/revanced-integrations/releases/latest",
+                ]
+            ),
+        )
     )
-    fallback_url1 = f"https://api.github.com/repos/{fallback_repo}/revanced-integrations/releases/latest"
-
-    temp = get_github_download_links(file_url, fallback_url, fallback_url1)
-    temp = list(filter(lambda x: ".asc" not in x, temp))
-    integrations_version, dl_url = temp
     if integrations_version in localfiles:
         print("integrations.apk is up-to-date")
     else:
-        download_file(dl_url, "integrations.apk")
+        download_file(integrations_url, "integrations.apk")
 
     with open(".revanced_versions.txt", "w") as file:
         file.write("\n".join([cli_version, patches_version, integrations_version]))
@@ -622,19 +655,19 @@ def main():
         "--cli",
         type=str,
         default=None,
-        help="github username to download revanced-cli from (priority over repository)",
+        help="github username to download revanced-cli from (priority over repository). use username/reponame for different repo names like YT-Advanced",
     )
     parser.add_argument(
         "--patches",
         type=str,
         default=None,
-        help="github username to download revanced-patches from (priority over repository)",
+        help="github username to download revanced-patches from (priority over repository). use username/reponame for different repo names like YT-Advanced",
     )
     parser.add_argument(
         "--integrations",
         type=str,
         default=None,
-        help="github username to download revanced-integrations from (priority over repository)",
+        help="github username to download revanced-integrations from (priority over repository). use username/reponame for different repo names like YT-Advanced",
     )
     parser.add_argument(
         "-a",

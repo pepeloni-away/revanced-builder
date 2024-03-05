@@ -13,7 +13,12 @@ you might need to install the requests python package if it isn't already instal
 clone the repo and run `python revanced.py` to build youtube revanced, after downloading or checking if revanced tools are up-to-date you will be asked to select patches and what to do with them.  
 you can use `python revanced.py -a` to be promted to select a different app based on patches, or provide a package name for an app yourself `python revanced.py -a tv.twitch.android.app`.
 
-### current -h output
+`python revanced.py inotia00` builds with revanced-cli, revanced-patches and revanced-integrations from [inotia00](https://github.com/inotia00?tab=repositories)
+
+`python revanced.py YT-Advanced --patches YT-Advanced/ReX-patches --integrations YT-Advanced/ReX-integrations` builds with ReX-patches and Rex-integrations from [YT-Advanced](https://github.com/YT-Advanced?tab=repositories) and falls back to revanced-cli
+
+### -h output
+\* probably not up to date, it's annoying to format this nicely after updates
 ```
 usage: revanced.py [-h] [-l] [-e] [--cli CLI] [--patches PATCHES] [--integrations INTEGRATIONS] [-a [APP]] [repository]
 
