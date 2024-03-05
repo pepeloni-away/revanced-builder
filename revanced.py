@@ -1,5 +1,6 @@
-import os
 import requests
+
+import os
 import json
 import subprocess
 import sys
@@ -8,20 +9,12 @@ import argparse
 import random
 import shutil
 
-
 def download_file(file_url: str, file_name: str):
     print("Downloading", file_url, "as", file_name)
 
-    # Set the chunk size for downloading (adjust as needed)
-    chunk_size = 1024  # 1 KB
-
-    # Open the URL for downloading
+    chunk_size = 1024
     response = requests.get(file_url, stream=True)
-
-    # Get the total file size from the response headers
     total_size = int(response.headers.get("content-length", 0))
-
-    # Initialize variables to keep track of the download progress
     downloaded_bytes = 0
 
     # Open the file for writing in binary mode
@@ -30,17 +23,23 @@ def download_file(file_url: str, file_name: str):
             file.write(data)
             downloaded_bytes += len(data)
 
-            # Calculate the progress percentage
-            progress_percent = (downloaded_bytes / total_size) * 100
+            if total_size == 0:
+                print(
+                    f"\r[{downloaded_bytes} bytes / unknown] [?%]", end="", flush=True
+                )
+            else:
+                progress_percent = (downloaded_bytes / total_size) * 100
 
-            max_length = shutil.get_terminal_size()[0] - 10
-            progress = "#" * int(progress_percent / 100 * max_length)
-            empty = " " * (max_length - len(progress))
+                max_length = shutil.get_terminal_size()[0] - 10
+                progress = "#" * int(progress_percent / 100 * max_length)
+                empty = " " * (max_length - len(progress))
 
-            # 8 fixed characters here, 4 square brackets, 1 space, 1 percent sign, 2 percent digits
-            print(
-                f"\r[{progress}{empty}] [{int(progress_percent)}%]", end="", flush=True
-            )
+                # 8 fixed characters here, 4 square brackets, 1 space, 1 percent sign, 2 percent digits
+                print(
+                    f"\r[{progress}{empty}] [{int(progress_percent)}%]",
+                    end="",
+                    flush=True,
+                )
     print()
 
 
