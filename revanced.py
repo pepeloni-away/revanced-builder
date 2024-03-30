@@ -9,6 +9,7 @@ import argparse
 import random
 import shutil
 
+
 def download_file(file_url: str, file_name: str):
     print("Downloading", file_url, "as", file_name)
 
@@ -58,7 +59,7 @@ def update_revanced(
                     links.append(item["name"])
                     links.append(item["browser_download_url"])
                 return links  # [name, url(, name, url)*]
-            print(url, 'not found. Attempting fallback')
+            print(url, "not found. Attempting fallback")
 
         links = [x for x in links if x != url]
         if len(links) > 0:
@@ -116,12 +117,17 @@ def update_revanced(
     not_asc = lambda x: ".asc" not in x
 
     # cli
-    cli_version, cli_url = get_github_assets(
-        [
-            specific_cli,
-            provided_repo + "/revanced-cli/releases/latest",
-            revanced_repo + "/revanced-cli/releases/latest",
-        ]
+    cli_version, cli_url = list(
+        filter(
+            not_asc,
+            get_github_assets(
+                [
+                    specific_cli,
+                    provided_repo + "/revanced-cli/releases/latest",
+                    revanced_repo + "/revanced-cli/releases/latest",
+                ]
+            ),
+        )
     )
     if cli_version in localfiles:
         print("cli.jar is up-to-date")
@@ -846,7 +852,10 @@ def main():
 
     if not args.export:
         subprocess.run(base_command)
-        print('Moved to', os.path.abspath(shutil.move(output_file, '../_builds/' + output_file)))
+        print(
+            "Moved to",
+            os.path.abspath(shutil.move(output_file, "../_builds/" + output_file)),
+        )
 
 
 if __name__ == "__main__":
