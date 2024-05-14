@@ -45,16 +45,24 @@ def download_file(file_url: str, file_name: str):
 
 
 def update_revanced(
-    repo: str, fallback_repo: str, cli: str, patches: str, integrations: str
+    repo: str, fallback_repo: str, cli: str, patches: str, integrations: str, dev: bool
 ):
     def get_github_assets(links: list):
         links = [x for x in links if x is not None]
+
+        if dev:
+            links = [a.replace("/latest", "") for a in links]
+
         if len(links) > 0:
             url = links[0]
             response = requests.get(url)
             if response.status_code == 200:
                 response = response.json()
                 links = []
+
+                if dev:
+                    response = response[0]
+
                 for item in response["assets"]:
                     links.append(item["name"])
                     links.append(item["browser_download_url"])
@@ -686,6 +694,11 @@ def main():
         + "The script will scan the working directory for apk files before trying to download when this option is used. "
         + "No checks are done with this option, you can provide any apk and use at least the universal patches on it",
     )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="don't ignore prereleases when downloading the latest version of patching tools from github",
+    )
 
     args = parser.parse_args()
 
@@ -705,7 +718,12 @@ def main():
 
     if not args.local:
         update_revanced(
-            args.repository, default_repo, args.cli, args.patches, args.integrations
+            args.repository,
+            default_repo,
+            args.cli,
+            args.patches,
+            args.integrations,
+            args.dev,
         )
 
     all_apps = []
