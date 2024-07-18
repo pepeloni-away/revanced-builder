@@ -143,7 +143,7 @@ def update_revanced(
         download_file(cli_url, "cli.jar")
 
     # patches
-    patches_json, patches_json_url, patches_version, patches_url = list(
+    temp = list(
         filter(
             not_asc,
             get_github_assets(
@@ -155,6 +155,11 @@ def update_revanced(
             ),
         )
     )
+    temp.sort(
+        key=lambda x: ".json" in x, reverse=True
+    )  # because https://github.com/rufusin/revanced-patches/releases changes the default release format
+    patches_json, patches_json_url, patches_version, patches_url = temp
+
     if patches_version in localfiles:
         print("patches.jar is up-to-date")
     else:
