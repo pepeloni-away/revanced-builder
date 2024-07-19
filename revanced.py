@@ -474,6 +474,7 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
         if apk:
             apk = f"../{apk}"
             print("Using user-provided apk file at:", os.path.abspath(apk))
+            check_apk_signature("", apk)
             return apk
         if apk != False:  # if user selected none
             print("No user-provided apk files found in the working directory")
@@ -500,10 +501,12 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
                 "Your choice (empy for download): ", [True, False], fn, True
             )
             if ignore_local == False:
+                check_apk_signature(package_name, default_apk)
                 return default_apk
 
     if f"{package_name}-{version}" in localversion:
         print("app.apk is up-to-date")
+        check_apk_signature(package_name, default_apk)
         return default_apk
 
     with open(".apk_version.txt", "w") as file:
@@ -524,6 +527,7 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
     with open(".apk_version.txt", "w") as file:
         file.write(f"{package_name}-{version or 'latest'}")
 
+    check_apk_signature(package_name, default_apk)
     return default_apk
 
 
@@ -665,6 +669,52 @@ def handleTermux():
                 )
     else:
         print("aapt2 file is missing, patching will probably fail")
+
+
+def check_apk_signature(package_name: str, path_to_apk: str):
+    knownSignatures = {
+        "com.google.android.youtube": ["24bb24c05e47e0aefa68a58a766179d9b613a600"],
+        "com.google.android.apps.youtube.music": [
+            "afb0fed5eeaebdd86f56a97742f4b6b33ef59875"
+        ],
+    }
+    command = [
+        "java",
+        "-jar",
+        "../apksigner.jar",
+        "verify",
+        "--print-certs",
+        path_to_apk,
+    ]
+
+    try:
+        process = subprocess.run(command, capture_output=True, text=True)
+        output = process.stdout
+        output = list(
+            filter(
+                lambda x: x.startswith("Signer") and "SHA-1 digest" in x,
+                output.split("\n"),
+            )
+        )
+        sha1 = output[-1].split(" ")[-1]
+        verifiable = package_name in knownSignatures
+        status = (
+            "¯\\_(ツ)_/¯"
+            if not verifiable
+            else "known" if sha1 in knownSignatures[package_name] else "unknown"
+        )
+        print(f"apk signature: {sha1}     [{status}]")
+        if status == "unknown":
+            # print("this apk has a different signature than usual,")
+            temp = select_item(
+                "This apk has a different signature than usual, continue? ",
+                [True, False],
+                lambda x: "yes" if x else "exit",
+            )
+            if temp == False:
+                sys.exit()
+    except Exception as e:
+        print("apk signature check crashed", e)
 
 
 def main():
