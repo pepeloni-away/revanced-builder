@@ -8,6 +8,8 @@ import re
 import argparse
 import random
 import shutil
+import http.client
+from urllib.parse import urlparse
 
 
 def download_file(file_url: str, file_name: str):
@@ -398,7 +400,7 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
     def apkpure():
         nonlocal url
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
         }
 
         url = (
@@ -407,16 +409,39 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
             + ("/download" if not version else f"/download/{version}")
         )
         progress(2)
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
+        # idk what requests does that causes it to get 403 on a request that works fine in borwsers and curl
+        # https://stackoverflow.com/questions/74446830/how-to-fix-403-forbidden-errors-with-python-requests-even-with-user-agent-head
+        # # #
+        # response = requests.get(url, headers=headers)
+        # print("\n\n", url, response, response.request.headers)
+        # if response.status_code == 200:
+
+        conn = http.client.HTTPSConnection("apkpure.com")
+        conn.request("GET", url.replace("https://apkpure.com", ""), headers=headers)
+        response = conn.getresponse()
+        location_header = response.getheader("location")
+        print("\n\nhttps://apkpure.com" + location_header)
+        # this also fails ///
+        # response = requests.get("https://apkpure.com" + location_header)
+        conn = http.client.HTTPSConnection("apkpure.com")
+        conn.request("GET", location_header, headers=headers)
+        response = conn.getresponse()
+        if response.status == 200:
             regex = r'https://d\.apkpure\.com/b/APK/.*?\?versionCode=\d+.*?(?=")'
-            match = re.search(regex, response.text)
+            # match = re.search(regex, response.text)
+            match = re.search(regex, response.read().decode())
             if match:
                 url = match.group().replace("&amp;", "&")
                 progress()
-                response = requests.get(url, headers=headers, allow_redirects=False)
-                if response.status_code == 302:
-                    url = response.headers["Location"]
+                # response = requests.get(url, headers=headers, allow_redirects=False)
+                parsedUrl = urlparse(url)
+                conn = http.client.HTTPSConnection(parsedUrl.netloc)
+                conn.request("GET", url.split(parsedUrl.netloc)[1], headers=headers)
+                response = conn.getresponse()
+                # if response.status_code == 302:
+                #     url = response.headers["Location"]
+                if response.status == 302:
+                    url = response.getheader("location")
                     return url
             progress(
                 over="did not find standalone apk for this app/version on apkpure, does it exits? "
