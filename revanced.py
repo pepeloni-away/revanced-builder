@@ -488,7 +488,10 @@ def get_apk(package_name: str, version: str, local: bool, scan_folder_for_apks: 
     download_link = None
     i = 0
     while download_link == None and i in range(0, len(sources)):
-        download_link = sources[i]()
+        try:
+            download_link = sources[i]()
+        except Exception as e:
+            print("\tfailed", e, "\n")
         i += 1
     assert download_link, "Completely failed to download apk"
     download_file(download_link, default_apk)
