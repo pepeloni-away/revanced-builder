@@ -2,6 +2,7 @@
 !LICENSE
 
 !.gitignore
+!old_revanced.py
 !revanced.py
 !bcprov-jdk18on-176.jar
 !aapt2
