@@ -109,7 +109,6 @@ def download_file(url: str, name: str):
                 predefined_space = 12 + 16
                 predefined_space += len(str(ceil(downloaded_bytes)))
 
-
                 if total_size:
                     predefined_space += len(str(ceil(total_size)))
                     progress_percent = (downloaded_bytes / total_size) * 100
@@ -220,6 +219,7 @@ def get_github_releases(
     for x in get:
         response[x] = request_json(url_map[x], amount)
     return response
+
 
 # nice urllib guide https://devdocs.io/python~3.10/howto/urllib2#urllib-howto
 def apkcombo(package_name: str, version: str = "") -> str:
@@ -486,6 +486,7 @@ APK_SOURCES = [
     apkpure,
 ]
 
+
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -505,10 +506,10 @@ def main():
         help=("run with the revanced tools available in the working directory"),
     )
     parser.add_argument(
-        '-s',
+        "-s",
         "--apk_source",
         choices=[x.__name__ for x in APK_SOURCES],
-        help="choose where to source apks from, or let the script try all of them in random order until it succeeds"
+        help="choose where to source apks from, or let the script try all of them in random order until it succeeds",
     )
     revanced_tools_args = parser.add_argument_group(
         "revanced tools",
@@ -582,13 +583,11 @@ def main():
         regex = r"^\w+ version \"?(\d{1,2})"
         version = int(re.match(regex, first_line).group(1))
         if version < 11:
-            print(
-                "Incompatible java verson, revanced requires at least java 11"
-            )
+            print("Incompatible java verson, revanced requires at least java 11")
             subprocess.run(cmd)  # show user's java version before exiting
             sys.exit(1)
     except FileNotFoundError:
-        sys.exit('Java not found, install jdk11 or higher')
+        sys.exit("Java not found, install jdk11 or higher")
 
     if not args.local:
         cli = get_github_releases(
@@ -857,7 +856,11 @@ def main():
     )
     # print(selected_patches)
 
-    apk_sources = [source for source in APK_SOURCES if source.__name__ == args.apk_source] if args.apk_source else APK_SOURCES
+    apk_sources = (
+        [source for source in APK_SOURCES if source.__name__ == args.apk_source]
+        if args.apk_source
+        else APK_SOURCES
+    )
     shuffle(apk_sources)
     apk_url = None
     while apk_url == None and len(apk_sources):
@@ -865,7 +868,7 @@ def main():
             apk_url = apk_sources.pop()(package_name=app, version=version)
         except Exception as e:
             tb = traceback.format_exc()
-            print("\tfailed", e, "\n", tb, '\n')
+            print("\tfailed", e, "\n", tb, "\n")
     assert apk_url, "Failed to scrape apk url."
     download_file(apk_url, "apk.apk")
 
@@ -880,6 +883,7 @@ def main():
             else "revanced.keystore"
         )
     )
+    output_file = f'revanced({args.repository})[{app.replace(".", "_")}].apk'
 
     def check_keystore_type(keystore_file: str):
         print("Using keystore file:", os.path.abspath(keystore_file), end="")
@@ -969,6 +973,7 @@ def main():
         *selected_patches,
         "--keystore=%s" % keystore_file,
         *keystore_options,
+        "--out=%s" % output_file,
         "apk.apk",
     ]
 
@@ -987,6 +992,10 @@ def main():
 
     # print(build_command)
     subprocess.run(build_command)
+    print(
+        "Moved to",
+        os.path.abspath(shutil.move(output_file, "../_builds/" + output_file)),
+    )
 
 
 if __name__ == "__main__":
