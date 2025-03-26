@@ -508,8 +508,11 @@ def main():
     parser.add_argument(
         "-s",
         "--apk_source",
-        choices=[x.__name__ for x in APK_SOURCES],
-        help="choose where to source apks from, or let the script try all of them in random order until it succeeds",
+        choices=[x.__name__ for x in APK_SOURCES] + ["local"],
+        help=(
+            "provide a local apk in the working directory or choose where to source apks from, "
+            "or let the script try all of them in random order until it succeeds"
+        ),
     )
     revanced_tools_args = parser.add_argument_group(
         "revanced tools",
@@ -695,7 +698,14 @@ def main():
     # print(all_apps)
     app = select_one_item("Select app: ", all_apps)
     print("Selected", app)
-    cmd = ["java", "-jar", "cli.jar", "list-versions", "patches.rvp", f"-f={app}"]
+    cmd = [
+        "java",
+        "-jar",
+        "cli.jar",
+        "list-versions",
+        "patches.rvp",
+        f"-f={app}",
+    ]
     output = subprocess.run(
         cmd,
         capture_output=True,
@@ -856,21 +866,36 @@ def main():
     )
     # print(selected_patches)
 
-    apk_sources = (
-        [source for source in APK_SOURCES if source.__name__ == args.apk_source]
-        if args.apk_source
-        else APK_SOURCES
-    )
-    shuffle(apk_sources)
-    apk_url = None
-    while apk_url == None and len(apk_sources):
-        try:
-            apk_url = apk_sources.pop()(package_name=app, version=version)
-        except Exception as e:
-            tb = traceback.format_exc()
-            print("\tfailed", e, "\n", tb, "\n")
-    assert apk_url, "Failed to scrape apk url."
-    download_file(apk_url, "apk.apk")
+    if not args.apk_source == "local":
+        apk_sources = (
+            [source for source in APK_SOURCES if source.__name__ == args.apk_source]
+            if args.apk_source
+            else APK_SOURCES
+        )
+        shuffle(apk_sources)
+        apk_url = None
+        while apk_url == None and len(apk_sources):
+            try:
+                apk_url = apk_sources.pop()(package_name=app, version=version)
+            except Exception as e:
+                tb = traceback.format_exc()
+                print("\tfailed", e, "\n", tb, "\n")
+        assert apk_url, "Failed to scrape apk url."
+        download_file(apk_url, "apk.apk")
+        apk_file = "apk.apk"
+    else:
+        files = os.listdir(os.path.dirname(os.getcwd()))
+        apk_files = [file for file in files if file.endswith(".apk")]
+        if len(apk_files):
+            apk_file = "../" + select_one_item(
+                "Select local apk: ",
+                apk_files,
+            )
+        else:
+            print(
+                "No apk files found in the working directory, place them next to revanced.py"
+            )
+            sys.exit(1)
 
     keystore_file = (
         args.keystore
@@ -974,7 +999,8 @@ def main():
         "--keystore=%s" % keystore_file,
         *keystore_options,
         "--out=%s" % output_file,
-        "apk.apk",
+        # "apk.apk",
+        apk_file,
     ]
 
     if "com.termux" in sys.prefix:
