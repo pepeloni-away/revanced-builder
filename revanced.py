@@ -8,6 +8,7 @@ import re
 import sys
 import traceback
 from random import shuffle
+from math import ceil
 import urllib.request
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.error import URLError, HTTPError
@@ -105,23 +106,27 @@ def download_file(url: str, name: str):
 
                 file.write(chunk)
                 downloaded_bytes += len(chunk)
+                predefined_space = 12 + 16
+                predefined_space += len(str(ceil(downloaded_bytes)))
+
 
                 if total_size:
+                    predefined_space += len(str(ceil(total_size)))
                     progress_percent = (downloaded_bytes / total_size) * 100
 
-                    max_length = shutil.get_terminal_size()[0] - 10
+                    max_length = shutil.get_terminal_size()[0] - predefined_space
                     progress = "#" * int(progress_percent / 100 * max_length)
                     empty = " " * (max_length - len(progress))
 
                     # 8 fixed characters here, 4 square brackets, 1 space, 1 percent sign, 2 percent digits
                     print(
-                        f"\r[{progress}{empty}] [{int(progress_percent)}%]",
+                        f"\r[{progress}{empty}] [{downloaded_bytes} / {total_size} bytes] [{int(progress_percent)}%]",
                         end="",
                         flush=True,
                     )
                 else:
                     print(
-                        f"\r[{downloaded_bytes} bytes / unknown] [?%]",
+                        f"\r[{downloaded_bytes} / unknown bytes] [?%]",
                         end="",
                         flush=True,
                     )
